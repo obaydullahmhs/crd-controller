@@ -1,0 +1,10 @@
+apiVersion: aadee.apps/v1alpha1
+kind: Aadee
+metadata:
+  name: aadee2
+spec:
+  name: aadee
+  replicas: 1
+  container:
+    image: nginx
+    port: 3005

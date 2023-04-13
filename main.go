@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"github.com/obaydullahmhs/crd-controller/controller"
 	klientset "github.com/obaydullahmhs/crd-controller/pkg/client/clientset/versioned"
 	informers "github.com/obaydullahmhs/crd-controller/pkg/client/informers/externalversions"
 	kubeinformers "k8s.io/client-go/informers"
@@ -49,5 +50,18 @@ func main() {
 	// From this informerfactory we can create specific informers for every group version resource
 	// that are default available in k8s environment such as Pods, deployment, etc
 	// podInformer := kubeInformationFactory.Core().V1().Pods()
+
+	ctrl := controller.NewController(kubeClient, myClient,
+		kubeInformationFactory.Apps().V1().Deployments(),
+		exampleInformationFactory.Aadee().V1alpha1().Aadees())
+
+	// creating a unbuffered channel to synchronize the update
+	stopCh := make(chan struct{})
+	kubeInformationFactory.Start(stopCh)
+	exampleInformationFactory.Start(stopCh)
+
+	if err = ctrl.Run(2, stopCh); err != nil {
+		log.Println("Error running controller")
+	}
 
 }
