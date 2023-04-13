@@ -240,10 +240,11 @@ func (c *Controller) syncHandler(key string) error {
 		return err
 	}
 
-	serviceName := aadee.Name + "-svc"
+	serviceName := aadee.Spec.Name + "-svc"
 
 	// Check if service already exists or not
 	service, err := c.kubeclientset.CoreV1().Services(aadee.Namespace).Get(context.TODO(), serviceName, metav1.GetOptions{})
+	fmt.Println(err)
 	if errors.IsNotFound(err) {
 		service, err = c.kubeclientset.CoreV1().Services(aadee.Namespace).Create(context.TODO(), newService(aadee), metav1.CreateOptions{})
 		if err != nil {
@@ -292,6 +293,18 @@ func newDeployment(aadee *controllerv1.Aadee) *appsv1.Deployment {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      aadee.Name + "-depl",
 			Namespace: aadee.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "aadee.apps/v1alpha1",
+					Kind:       "Aadee",
+					Name:       aadee.Name,
+					UID:        aadee.UID,
+					Controller: func() *bool {
+						var ok = true
+						return &ok
+					}(),
+				},
+			},
 		},
 		Spec: appsv1.DeploymentSpec{
 
@@ -336,7 +349,7 @@ func newService(aadee *controllerv1.Aadee) *corev1.Service {
 			Kind: "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: aadee.Name + "-svc",
+			Name: aadee.Spec.Name + "-svc",
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(aadee, controllerv1.SchemeGroupVersion.WithKind("Aadee")),
 			},
