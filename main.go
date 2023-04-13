@@ -2,9 +2,9 @@ package main
 
 import (
 	"flag"
-	"github.com/obaydullahmhs/crd-controller/controller"
 	klientset "github.com/obaydullahmhs/crd-controller/pkg/client/clientset/versioned"
 	informers "github.com/obaydullahmhs/crd-controller/pkg/client/informers/externalversions"
+	"github.com/obaydullahmhs/crd-controller/pkg/controller"
 	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"

@@ -2,7 +2,8 @@ package controller
 
 import (
 	"fmt"
-	controllerv1 "github.com/obaydullahmhs/crd-controller/pkg/apis/aadee.apps/v1alpha1"
+
+	controllerv1alpha1 "github.com/obaydullahmhs/crd-controller/pkg/apis/aadee.apps/v1alpha1"
 	klientset "github.com/obaydullahmhs/crd-controller/pkg/client/clientset/versioned"
 	informer "github.com/obaydullahmhs/crd-controller/pkg/client/informers/externalversions/aadee.apps/v1alpha1"
 	lister "github.com/obaydullahmhs/crd-controller/pkg/client/listers/aadee.apps/v1alpha1"
@@ -190,26 +191,27 @@ func (c *Controller) syncHandler(key string) error {
 			// We choose to absorb the error here as the worker would requeue the
 			// resource otherwise. Instead, the next time the resource is updated
 			// the resource will be queued again.
-			utilruntime.HandleError(fmt.Errorf("Aadee '%s' in work queue no longer exists", key))
+			fmt.Printf("Aadee '%s' in work queue no longer exists", key)
 			return nil
 		}
 		return err
 	}
 
-	deploymentName := aadee.Name
-	if deploymentName == "" {
+	deploymentName := aadee.Name + "-" + aadee.Spec.Name
+	if aadee.Spec.Name == "" {
 		// We choose to absorb the error here as the worker would requeue the
 		// resource otherwise. Instead, the next time the resource is updated
 		// the resource will be queued again.
-		utilruntime.HandleError(fmt.Errorf("%s : deployment name must be specified", key))
-		return nil
+		deploymentName = aadee.Name + "-missingname"
+		//utilruntime.HandleError(fmt.Errorf("%s : deployment name must be specified", key))
+		//return nil
 	}
 
 	// Get the deployment with the name specified in Aadee.spec
 	deployment, err := c.deploymentsLister.Deployments(namespace).Get(deploymentName + "-depl")
 	// If the resource doesn't exist, we'll create it
 	if errors.IsNotFound(err) {
-		deployment, err = c.kubeclientset.AppsV1().Deployments(aadee.Namespace).Create(context.TODO(), newDeployment(aadee), metav1.CreateOptions{})
+		deployment, err = c.kubeclientset.AppsV1().Deployments(aadee.Namespace).Create(context.TODO(), newDeployment(aadee, deploymentName), metav1.CreateOptions{})
 
 	}
 	// If an error occurs during Get/Create, we'll requeue the item, so we can
@@ -225,7 +227,7 @@ func (c *Controller) syncHandler(key string) error {
 	if aadee.Spec.Replicas != nil && *aadee.Spec.Replicas != *deployment.Spec.Replicas {
 		log.Printf("Aadee %s replicas: %d, deployment replicas: %d\n", name, *aadee.Spec.Replicas, *deployment.Spec.Replicas)
 
-		deployment, err = c.kubeclientset.AppsV1().Deployments(namespace).Update(context.TODO(), newDeployment(aadee), metav1.UpdateOptions{})
+		deployment, err = c.kubeclientset.AppsV1().Deployments(namespace).Update(context.TODO(), newDeployment(aadee, deploymentName), metav1.UpdateOptions{})
 		// If an error occurs during Update, we'll requeue the item, so we can
 		// attempt processing again later. This could have been caused by a
 		// temporary network failure, or any other transient reason.
@@ -240,15 +242,22 @@ func (c *Controller) syncHandler(key string) error {
 		return err
 	}
 
-	serviceName := aadee.Spec.Name + "-svc"
-
+	serviceName := aadee.Name + "-" + aadee.Spec.Name
+	if aadee.Spec.Name == "" {
+		// We choose to absorb the error here as the worker would requeue the
+		// resource otherwise. Instead, the next time the resource is updated
+		// the resource will be queued again.
+		serviceName = aadee.Name + "-missingname"
+		//utilruntime.HandleError(fmt.Errorf("%s : deployment name must be specified", key))
+		//return nil
+	}
 	// Check if service already exists or not
-	service, err := c.kubeclientset.CoreV1().Services(aadee.Namespace).Get(context.TODO(), serviceName, metav1.GetOptions{})
-	fmt.Println(err)
+	service, err := c.kubeclientset.CoreV1().Services(aadee.Namespace).Get(context.TODO(), serviceName+"-svc", metav1.GetOptions{})
+
 	if errors.IsNotFound(err) {
-		service, err = c.kubeclientset.CoreV1().Services(aadee.Namespace).Create(context.TODO(), newService(aadee), metav1.CreateOptions{})
+		service, err = c.kubeclientset.CoreV1().Services(aadee.Namespace).Create(context.TODO(), newService(aadee, serviceName), metav1.CreateOptions{})
 		if err != nil {
-			log.Println(err)
+			//log.Println(err)
 			return err
 		}
 		log.Printf("\nservice %s created .....\n", service.Name)
@@ -266,7 +275,7 @@ func (c *Controller) syncHandler(key string) error {
 	return nil
 }
 
-func (c *Controller) updateAadeeStatus(aadee *controllerv1.Aadee, deployment *appsv1.Deployment) error {
+func (c *Controller) updateAadeeStatus(aadee *controllerv1alpha1.Aadee, deployment *appsv1.Deployment) error {
 
 	// NEVER modify objects from the store. It's a read-only, local cache.
 	// You can use DeepCopy() to make a deep copy of original object and modify this copy
@@ -287,11 +296,11 @@ func (c *Controller) updateAadeeStatus(aadee *controllerv1.Aadee, deployment *ap
 // newDeployment creates a new Deployment for a Aadee resource. It also sets
 // the appropriate OwnerReferences on the resource so handleObject can discover
 // the Aadee resource that 'owns' it.
-func newDeployment(aadee *controllerv1.Aadee) *appsv1.Deployment {
+func newDeployment(aadee *controllerv1alpha1.Aadee, deploymentName string) *appsv1.Deployment {
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      aadee.Name + "-depl",
+			Name:      deploymentName + "-depl",
 			Namespace: aadee.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				{
@@ -311,19 +320,21 @@ func newDeployment(aadee *controllerv1.Aadee) *appsv1.Deployment {
 			Replicas: aadee.Spec.Replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"app": "my-app",
+					"app":  aadee.Name,
+					"kind": "Aadee",
 				},
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"app": "my-app",
+						"app":  aadee.Name,
+						"kind": "Aadee",
 					},
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Name:  "my-app",
+							Name:  aadee.Name,
 							Image: aadee.Spec.Container.Image,
 							Ports: []corev1.ContainerPort{
 								{
@@ -340,28 +351,29 @@ func newDeployment(aadee *controllerv1.Aadee) *appsv1.Deployment {
 	}
 }
 
-func newService(aadee *controllerv1.Aadee) *corev1.Service {
+func newService(aadee *controllerv1alpha1.Aadee, serviceName string) *corev1.Service {
 	labels := map[string]string{
-		"app": "my-app",
+		"app":  aadee.Name,
+		"kind": "Aadee",
 	}
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			Kind: "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: aadee.Spec.Name + "-svc",
+			Name: serviceName + "-svc",
 			OwnerReferences: []metav1.OwnerReference{
-				*metav1.NewControllerRef(aadee, controllerv1.SchemeGroupVersion.WithKind("Aadee")),
+				*metav1.NewControllerRef(aadee, controllerv1alpha1.SchemeGroupVersion.WithKind("Aadee")),
 			},
 		},
 		Spec: corev1.ServiceSpec{
-			Type:     corev1.ServiceTypeNodePort,
+			Type:     corev1.ServiceTypeClusterIP,
 			Selector: labels,
 			Ports: []corev1.ServicePort{
 				{
 					Port:       aadee.Spec.Container.Port,
 					TargetPort: intstr.FromInt(int(aadee.Spec.Container.Port)),
-					NodePort:   30007,
+					Protocol:   "TCP",
 				},
 			},
 		},

@@ -1,7 +1,7 @@
 apiVersion: aadee.apps/v1alpha1
 kind: Aadee
 metadata:
-  name: aadee2
+  name: aadee1
 spec:
   name: aadee
   replicas: 1
